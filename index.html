@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ลอยกระทงออนไลน์ · Minimal</title>
+<meta name="description" content="ลอยกระทงออนไลน์แบบมินิมอล เลือกกระทง/เทียนได้เสถียร พร้อมป้ายสี่เหลี่ยมยื่นขึ้นจากกระทง (ออฟไลน์)"/>
+<style>
+  :root{
+    --bg:#061a33; --bg2:#0a2a57;
+    --glass:#0c2344cc; --stroke:#1b4c8a; --text:#eaf4ff;
+    --accent:#2d7be8; --muted:#9ec6ff;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; color:var(--text); font:15px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans Thai", Arial;
+    background: radial-gradient(1200px 700px at 70% -20%, #1b4f99 0%, var(--bg) 50%) no-repeat,
+                linear-gradient(var(--bg), var(--bg2));
+    overflow:hidden;
+  }
+  /* Stage fills screen */
+  #sea{position:absolute; inset:0; width:100%; height:100%; display:block}
+  .overlay{position:absolute; inset:0; pointer-events:none;
+    background: radial-gradient(1000px 400px at 85% -10%, rgba(200,230,255,.10), transparent 60%);
+    mix-blend-mode:screen;
+  }
+
+  /* Minimal dock */
+  .dock{
+    --ui-size: 18px;             /* <== ปรับตัวเดียว ทุกอย่างเท่ากัน */
+    position:fixed; left:12px; right:12px; bottom:12px;
+    display:flex; gap:10px; align-items:center;
+    background:var(--glass); border:1px solid var(--stroke); border-radius:14px;
+    padding:8px 10px; backdrop-filter: blur(8px);
+    font-size: var(--ui-size);   /* ทำให้ลูกๆ inherit */
+  }
+  .dock .group{display:flex; gap:8px; align-items:center}
+  label{color:var(--muted)}
+
+  /* Make ALL controls the same text size + vertical rhythm */
+  .dock label,
+  .dock select,
+  .dock input,
+  .dock button{
+    font-size: 1em;              /* เท่ากับ --ui-size */
+    line-height: 1.2;
+  }
+  .dock input::placeholder{ font-size: 1em; opacity:.6 }
+  .dock select, .dock input, .dock button{
+    appearance:none; border:1px solid var(--stroke); background:#0a1f3e; color:var(--text);
+    border-radius:10px; padding:10px 12px; height:auto;
+  }
+  /* Make select text equal on all platforms */
+  .dock select { padding-right: 28px; }
+  .dock option { font-size: 1em; }
+
+  button{background:var(--accent); border-color:#2a6bd6; font-weight:600; cursor:pointer}
+  button.secondary{background:#102a52}
+  .split{flex:1; display:flex; gap:8px}
+  .split > *{flex:1}
+  .thumb{width:120px; height:80px; border-radius:10px; border:1px solid var(--stroke); overflow:hidden; background:#0b254a}
+  .brand{font-weight:700; letter-spacing:.2px; color:#cfe2ff; font-size:1em}
+  .brand small{font-weight:400; color:#9fc1ff}
+  .spacer{flex:1}
+  details.wall{
+    position:fixed; right:12px; top:12px; max-width:min(480px, 70vw);
+    background:var(--glass); border:1px solid var(--stroke); border-radius:12px;
+    padding:8px 10px;
+  }
+  details.wall > summary{cursor:pointer; outline:none}
+  .walllist{display:grid; grid-template-columns:1fr; gap:6px; max-height:40vh; overflow:auto; margin-top:8px}
+  .wish{background:#0b254a; border:1px solid var(--stroke); border-radius:10px; padding:8px; font-size: var(--ui-size)}
+
+  @media (max-width:980px){
+    .brand{display:none}
+    .dock{flex-wrap:wrap; row-gap:6px}
+    .split{flex-basis:100%}
+  }
+</style>
+</head>
+<body>
+  <canvas id="sea" width="1400" height="800" aria-label="ผืนน้ำและกระทง"></canvas>
+  <div class="overlay" aria-hidden="true"></div>
+
+  <details class="wall">
+    <summary>ลานคำอธิษฐาน</summary>
+    <div class="walllist" id="wall"></div>
+    <div style="display:flex; gap:6px; margin-top:8px">
+      <button id="btnClear" class="secondary" style="flex:1">ล้างลาน</button>
+      <button id="btnExport" class="secondary" style="flex:1">บันทึกรูป</button>
+    </div>
+  </details>
+
+  <div class="dock">
+    <div class="brand">ลอยกระทง <small>Minimal</small></div>
+    <div class="thumb"><canvas id="preview" width="120" height="80" aria-label="ตัวอย่าง"></canvas></div>
+
+    <div class="group">
+      <label for="style">กระทง</label>
+      <select id="style">
+        <option value="classic">คลาสสิก</option>
+        <option value="lotus">ดอกบัว</option>
+        <option value="star">ดาว</option>
+      </select>
+    </div>
+
+    <div class="group">
+      <label for="candle">เทียน</label>
+      <select id="candle">
+        <option value="none">ไม่มี</option>
+        <option value="one" selected>1 เล่ม</option>
+        <option value="three">3 เล่ม</option>
+      </select>
+    </div>
+
+    <div class="group">
+      <label for="color">สี</label>
+      <select id="color">
+        <option value="#7ad37a">เขียว</option>
+        <option value="#d37ab1">ชมพู</option>
+        <option value="#8bb7ff">ฟ้า</option>
+        <option value="#f2b36e">ส้ม</option>
+        <option value="#c6a3ff">ม่วง</option>
+      </select>
+    </div>
+
+    <div class="split">
+      <input id="yourName" placeholder="ชื่อ" />
+      <input id="wish" placeholder="คำอธิษฐาน" />
+    </div>
+
+    <div class="group">
+      <button id="btnFloat">ลอย</button>
+    </div>
+
+    <div class="spacer"></div>
+  </div>
+
+<script>
+(function(){
+  // ------- Base utilities & state -------
+  const $ = sel => document.querySelector(sel);
+  const canvas = $('#sea'); const ctx = canvas.getContext('2d');
+  const pcanvas = $('#preview'); const pctx = pcanvas.getContext('2d');
+  const wallEl = $('#wall');
+
+  const config = { style:'classic', candle:'one', color:'#7ad37a', baseSize: 90 };
+  setInterval(()=>location.reload(), 5*60*1000);
+
+  function fit(){
+    const r = canvas.getBoundingClientRect();
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(r.width*dpr);
+    canvas.height = Math.floor(r.height*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  new ResizeObserver(fit).observe(document.body); fit();
+
+  function drawWater(t, c=ctx, w=canvas.clientWidth, h=canvas.clientHeight){
+    const g=c.createLinearGradient(0,0,0,h);
+    g.addColorStop(0,'#1372d1'); g.addColorStop(1,'#0b4c9b');
+    c.fillStyle=g; c.fillRect(0,0,w,h);
+    c.save(); c.globalAlpha=.30; c.strokeStyle='#2d8bf0';
+    for(let y=h*0.30; y<h; y+=16){
+      c.beginPath();
+      for(let x=0; x<=w; x+=10){
+        const k=(Math.sin(x*.015+t*.0013+y*.03)+Math.sin(x*.0075+t*.0018))/2;
+        const yy=y+k*3.8;
+        x===0? c.moveTo(x,yy) : c.lineTo(x,yy);
+      } c.stroke();
+    }
+    c.restore();
+    c.save(); c.globalAlpha=.18;
+    for(let i=0;i<80;i++){ const x=(i*47+(t*.05)%w)%w, y=(i*53)%h; c.fillStyle='#e6f4ff'; c.fillRect(x,y,1,1); }
+    c.restore();
+  }
+
+  const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+  function shadeHex(hex, delta){
+    const c=hex.replace('#',''); const num=parseInt(c,16);
+    let r=(num>>16)&255,g=(num>>8)&255,b=num&255;
+    r=clamp(r+delta,0,255); g=clamp(g+delta,0,255); b=clamp(b+delta,0,255);
+    return '#'+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
+  }
+
+  function wrapLines(ctx, text, maxWidth, maxLines) {
+    const words = (text || '').split(/\s+/);
+    const lines = []; let line = '';
+    for (const w of words) {
+      const test = line ? line + ' ' + w : w;
+      if (ctx.measureText(test).width <= maxWidth) line = test;
+      else { if (line) lines.push(line); line = w; if (lines.length === maxLines - 1) break; }
+    }
+    if (line && lines.length < maxLines) lines.push(line);
+    const used = lines.join(' ').split(/\s+/).filter(Boolean).length;
+    if (used < words.filter(Boolean).length) {
+      let last = (lines.pop() || ''), t = last + '…';
+      while (ctx.measureText(t).width > maxWidth && t.length > 1) t = t.slice(0, -2) + '…';
+      lines.push(t);
+    }
+    return lines;
+  }
+
+  function drawLabelBubble(c, x, anchorY, text, opt = {}) {
+    const maxWidth = opt.maxWidth ?? 320, padding  = opt.padding  ?? 10;
+    const radius   = opt.radius   ?? 10,  pointerH = opt.pointerH ?? 12;
+    c.save();
+    c.font = '600 14px "Noto Sans Thai", ui-sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    const lines = wrapLines(c, text, maxWidth - padding*2, 3);
+    const lineH = 18, contentH = lines.length * lineH;
+    const w = Math.min(maxWidth, Math.max(120, ...lines.map(t => c.measureText(t).width)) + padding*2);
+    const h = contentH + padding*2;
+    const boxX = x - w/2, boxY = anchorY - (h + pointerH);
+    c.beginPath();
+    c.moveTo(boxX + radius, boxY);
+    c.lineTo(boxX + w - radius, boxY);
+    c.quadraticCurveTo(boxX + w, boxY, boxX + w, boxY + radius);
+    c.lineTo(boxX + w, boxY + h - radius);
+    c.quadraticCurveTo(boxX + w, boxY + h, boxX + w - radius, boxY + h);
+    c.lineTo(x + 8, boxY + h); c.lineTo(x, boxY + h + pointerH); c.lineTo(x - 8, boxY + h);
+    c.lineTo(boxX + radius, boxY + h);
+    c.quadraticCurveTo(boxX, boxY + h, boxX, boxY + h - radius);
+    c.lineTo(boxX, boxY + radius);
+    c.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
+    c.closePath();
+    c.shadowColor = 'rgba(0,0,0,.35)'; c.shadowBlur = 8; c.shadowOffsetY = 3;
+    c.fillStyle = opt.fill   ?? 'rgba(8, 22, 50, 0.90)';
+    c.strokeStyle = opt.stroke ?? 'rgba(70, 140, 230, 0.95)'; c.lineWidth = 1.2;
+    c.fill(); c.stroke();
+    c.shadowColor = 'transparent';
+    c.fillStyle = opt.textFill ?? 'rgba(255,255,255,.98)';
+    const startY = boxY + padding + lineH/2;
+    lines.forEach((t, i) => c.fillText(t, x, startY + i*lineH));
+    c.restore();
+  }
+
+  function drawKrathongBody(c, x,y, size, style, color){
+    c.save(); c.fillStyle = '#0b2d66';
+    c.beginPath(); c.ellipse(x, y+size*0.22, size*0.7, size*0.18, 0, 0, Math.PI*2); c.fill(); c.restore();
+    c.save(); c.translate(x,y);
+    const col=color;
+    const petal=(r1,r2,a1,a2,fill)=>{ c.beginPath(); c.moveTo(0,0); c.ellipse(0,0,r1,r2,0,a1,a2); c.closePath(); c.fillStyle=fill; c.fill(); };
+    for(let i=0;i<12;i++){ c.rotate(Math.PI*2/12); const shade = shadeHex(col, i%2? -12: +6); petal(size*.68, size*.32, Math.PI*.05, Math.PI*.95, shade); }
+    if(style==='lotus'){ for(let i=0;i<8;i++){ c.rotate(Math.PI*2/8); const shade = shadeHex(col, i%2? -28: -8); petal(size*.5, size*.6, Math.PI*1.02, Math.PI*1.98, shade); } }
+    else if(style==='star'){ c.save(); c.rotate(-Math.PI/10); for(let i=0;i<6;i++){ c.rotate(Math.PI/3); c.beginPath(); c.moveTo(0,0); c.lineTo(size*.72,0); c.lineTo(0,size*.22); c.closePath(); c.fillStyle=shadeHex(col, i%2? -20: +8); c.fill(); } c.restore(); }
+    c.restore();
+  }
+
+  function drawCandles(c, x, y, type, t){
+    if(type==='none') return;
+    const offsets = type==='one' ? [0] : [-8, 0, 8];
+    offsets.forEach(dx=>{
+      c.fillStyle='#f2cf84'; c.fillRect(x-2+dx, y-16, 4, 16);
+      const flick=(Math.sin(t*.02+dx)+Math.sin(t*.017+2+dx))*.5+1; const r=9+flick*2;
+      const g=c.createRadialGradient(x+dx, y-22, 1, x+dx, y-22, r*2);
+      g.addColorStop(0,'rgba(255,240,180,1)'); g.addColorStop(.4,'rgba(255,190,80,.9)'); g.addColorStop(1,'rgba(255,190,80,0)');
+      c.fillStyle=g; c.beginPath(); c.arc(x+dx, y-22, r*2, 0, Math.PI*2); c.fill();
+      c.fillStyle='#fff6cf'; c.beginPath(); c.ellipse(x+dx, y-22, 3.5, 7, 0, 0, Math.PI*2); c.fill();
+    });
+  }
+
+  class Krathong {
+    constructor(cfg, name, wish){
+      this.x = -60;
+      this.y = canvas.clientHeight*0.48 + Math.random()*canvas.clientHeight*0.36;
+      this.style  = cfg.style; this.candle = cfg.candle; this.color  = cfg.color; this.baseSize = cfg.baseSize;
+      this.phase = Math.random()*Math.PI*2; this.vx = 0.38 + Math.random()*0.30;
+      this.name = (name && name.trim()) ? name.trim() : 'ไม่ระบุชื่อ';
+      this.wish = (wish || '').trim();
+    }
+    draw(t){
+      this.phase += 0.015; this.x += this.vx*(1+Math.sin(this.phase)*0.05); this.y += Math.sin(this.phase)*0.20;
+      ctx.save(); ctx.globalAlpha=.22; ctx.fillStyle='#04172e';
+      ctx.beginPath(); ctx.ellipse(this.x, this.y+this.baseSize*0.35, this.baseSize*0.8, this.baseSize*0.25, 0,0,Math.PI*2); ctx.fill(); ctx.restore();
+      drawKrathongBody(ctx, this.x, this.y, this.baseSize, this.style, this.color);
+      drawCandles(ctx, this.x, this.y - this.baseSize*0.25, this.candle, performance.now());
+      const textRaw = this.wish ? `${this.name} · ${this.wish}` : this.name;
+      const anchorY = this.y - this.baseSize*0.55;
+      drawLabelBubble(ctx, this.x, anchorY, textRaw);
+      if(this.x > canvas.clientWidth + 120){ this.x = -60; this.y = canvas.clientHeight*0.48 + Math.random()*canvas.clientHeight*0.36; }
+    }
+  }
+
+  const items = [];
+  function drawPreview(){
+    const c=pctx, w=pcanvas.width, h=pcanvas.height;
+    c.setTransform(1,0,0,1,0,0); c.clearRect(0,0,w,h);
+    drawWater(performance.now(), c, w, h);
+    drawKrathongBody(c, w*0.5, h*0.64, 44, config.style, config.color);
+    drawCandles(c, w*0.5, h*0.64 - 44*0.25, config.candle, performance.now());
+  }
+
+  function frame(ts){ drawWater(ts); for(const k of items) k.draw(ts); requestAnimationFrame(frame); }
+  requestAnimationFrame(frame);
+
+  function syncConfigFromUI(){ config.style = $('#style').value; config.candle = $('#candle').value; config.color = $('#color').value; }
+  ['style','candle','color'].forEach(id=>$('#'+id).addEventListener('change', ()=>{ syncConfigFromUI(); drawPreview(); }));
+
+  $('#btnFloat').addEventListener('click', ()=>{
+    syncConfigFromUI();
+    const name = $('#yourName').value.trim();
+    const wish = $('#wish').value.trim();
+    items.push(new Krathong(config, name, wish));
+    drawPreview();
+  });
+
+  $('#btnClear').addEventListener('click', ()=>{ localStorage.removeItem('loykrathong.wall.v2'); wallEl.innerHTML=''; });
+  $('#btnExport').addEventListener('click', ()=>{
+    const dpr = Math.min(devicePixelRatio||1,2);
+    const off = document.createElement('canvas'); off.width = Math.floor(canvas.clientWidth*dpr); off.height= Math.floor(canvas.clientHeight*dpr);
+    const ox = off.getContext('2d'); ox.setTransform(dpr,0,0,dpr,0,0);
+    drawWater(performance.now(), ox, canvas.clientWidth, canvas.clientHeight);
+    ox.drawImage(canvas,0,0,canvas.width,canvas.height,0,0,canvas.clientWidth,canvas.clientHeight);
+    ox.fillStyle='rgba(0,0,0,.35)'; ox.fillRect(12,12,240,34);
+    ox.fillStyle='#ffebb0'; ox.font='700 16px ui-sans-serif, "Noto Sans Thai"'; ox.fillText('ลอยกระทงออนไลน์', 20, 35);
+    const url = off.toDataURL('image/png'); const a = document.createElement('a'); a.href=url; a.download='loykrathong.png'; a.click();
+  });
+
+  syncConfigFromUI(); drawPreview();
+})();
+</script>
+</body>
+</html>
